@@ -9,9 +9,11 @@ export function createGetter(path) {
   return function(obj) {
     let result = obj;
 
-    for (let key of segments) {
-      if (typeof result === 'object') {
+    for (const key of segments) {
+      if (typeof result === 'object' && result !== null) {
         result = result[key];
+      } else {
+        break;
       }
     }
 
