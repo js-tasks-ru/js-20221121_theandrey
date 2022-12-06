@@ -1,44 +1,32 @@
 export default class ColumnChart {
-  /** @type {string} */
-  label = '';
-  /** @type {number[]} */
-  data = [];
-  /** @type {number} */
-  value = 0;
-  /** @type {?string} */
-  link = null;
-  /** @type {?function} */
-  headingFormatter = null;
-  /** @type {number} */
   chartHeight = 50;
+  /** @type {Object<string, HTMLElement>} */
+  elements = {};
 
-  /**
-   * @param {Object} options
-   */
-  constructor(options = {}) {
-    this.element = document.createElement('div');
-    this.element.classList.add('column-chart');
-    this.update(options);
+  constructor(
+    {
+      label = '',
+      data = [],
+      value = 0,
+      link = '',
+      formatHeading = (val) => val
+    } = {}
+  ) {
+    this.label = label;
+    this.data = data;
+    this.value = value;
+    this.link = link;
+    this.headingFormatter = formatHeading;
+
+    this.render();
   }
 
   /**
    * Updates component data
-   * @param {Object} options
+   * @param {number[]} data
    */
-  update(options = {}) {
-    this.label = options.label ?? '';
-    this.data = options.data ?? [];
-    this.value = options.value ?? 0;
-    this.link = options.link ?? null;
-    this.headingFormatter = options.formatHeading ?? null;
-
-    // Loading state
-    if (this.data.length > 0) {
-      this.element.classList.remove('column-chart_loading');
-    } else {
-      this.element.classList.add('column-chart_loading');
-    }
-
+  update(data = []) {
+    this.data = data;
     this.render();
   }
 
@@ -52,31 +40,57 @@ export default class ColumnChart {
     if (this.element) {
       this.remove();
       this.element = null;
+      this.elements = {};
     }
   }
 
   getTemplate() {
-    const valueFormatted = typeof this.headingFormatter === 'function' ? this.headingFormatter(this.value) : this.value;
     const linkTemplate = this.link ? `<a href="${this.link}" class="column-chart__link">View all</a>` : '';
-    const chartsTemplate = this.getColumnProps(this.data)
-      .map(item => `<div style="--value: ${item.value}" data-tooltip="${item.percent}"></div>`)
-      .join('\n');
 
     return `<div class="column-chart__title">
         Total ${this.label}
         ${linkTemplate}
       </div>
       <div class="column-chart__container">
-        <div data-element="header" class="column-chart__header">${valueFormatted}</div>
-        <div data-element="body" class="column-chart__chart">
-         ${chartsTemplate}
-        </div>
+        <div data-element="header" class="column-chart__header"><!-- {value} --></div>
+        <div data-element="body" class="column-chart__chart"><!-- {charts} --></div>
       </div>`;
   }
 
+  getChartsTemplate() {
+    return this.getColumnProps(this.data)
+      .map(item => `<div style="--value: ${item.value}" data-tooltip="${item.percent}"></div>`)
+      .join('\n');
+  }
+
   render() {
+    if (!this.element) {
+      this.element = document.createElement('div');
+      this.element.innerHTML = this.getTemplate();
+      this.element.querySelectorAll('[data-element]').forEach((el) => {
+        this.elements[el.dataset.element] = el;
+      });
+    }
+
     this.element.style.setProperty('--chart-height', this.chartHeight.toString());
-    this.element.innerHTML = this.getTemplate();
+    this.element.className = ColumnChart.filterClassList({
+      'column-chart': true,
+      'column-chart_loading': !this.data.length,
+    }).join(' ');
+
+    this.elements.header.innerHTML = this.headingFormatter(this.value);
+    this.elements.body.innerHTML = this.getChartsTemplate();
+  }
+
+  /**
+   * Filters CSS class list by condition
+   * @param {Object<string, boolean>} list Class names
+   * @return {string[]}
+   */
+  static filterClassList(list) {
+    return Object.entries(list)
+      .filter(([clazz, enabled]) => enabled)
+      .map(([clazz]) => clazz);
   }
 
   /**
