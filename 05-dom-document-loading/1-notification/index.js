@@ -1,7 +1,6 @@
 export default class NotificationMessage {
-  /** @type {HTMLElement} */
-  static element;
-  static timeoutId = 0;
+  /** @type {?NotificationMessage} */
+  static activeInstance;
 
   /**
    * @param {string} message
@@ -13,7 +12,7 @@ export default class NotificationMessage {
     type = ''
   } = {}) {
     this.duration = duration;
-    this.element = NotificationMessage.element ?? (NotificationMessage.element = document.createElement('div'));
+    this.element = document.createElement('div');
     this.element.className = 'notification ' + type;
     this.element.innerHTML = this.getTemplate(type, message);
   }
@@ -35,17 +34,23 @@ export default class NotificationMessage {
    * @param {HTMLElement} container
    */
   show(container = document.body) {
-    clearTimeout(NotificationMessage.timeoutId);
-    this.remove();
+    if (NotificationMessage.activeInstance) {
+      NotificationMessage.activeInstance.destroy();
+    }
+
     container.appendChild(this.element);
 
     this.element.style.setProperty('--value', this.duration + 'ms');
-    NotificationMessage.timeoutId = setTimeout(() => this.remove(), this.duration);
+    this.timeoutId = setTimeout(() => this.remove(), this.duration);
+
+    NotificationMessage.activeInstance = this;
   }
 
   remove() {
     if (this.element) {
+      clearTimeout(this.timeoutId);
       this.element.remove();
+      NotificationMessage.activeInstance = null;
     }
   }
 

@@ -92,8 +92,7 @@ export default class SortableTable {
       const body = this.subElements.body = document.createElement('div');
       body.classList.add('sortable-table__body');
 
-      this.element.appendChild(header);
-      this.element.appendChild(body);
+      this.element.append(header, body);
 
       header.querySelectorAll('[data-id]').forEach(el => {
         this.subElements['header_' + el.dataset.id] = el;
@@ -110,7 +109,7 @@ export default class SortableTable {
     if (this.sortBy) {
       const column = this.subElements['header_' + this.sortBy];
       column.dataset.order = this.sortOrder;
-      column.appendChild(this.subElements.sortArrow);
+      column.append(this.subElements.sortArrow);
     }
 
     /* Update data order */
