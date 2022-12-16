@@ -84,7 +84,7 @@ describe('async-code-fetch-api-part-1/sortable-table-v3', () => {
   it('should render loaded data correctly', async() => {
     fetchMock.mockResponseOnce(JSON.stringify(products));
 
-    await sortableTable.render();
+    await sortableTable.loadData(); // Fix: render() не возвращает Promise, это делает loadData()
 
     const { body } = sortableTable.subElements;
 
