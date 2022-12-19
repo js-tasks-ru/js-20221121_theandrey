@@ -1,21 +1,47 @@
 class Tooltip {
-  static _instance = new Tooltip();
-
+  static instance = new Tooltip();
   static haveTooltip = (el) => el.matches('[data-tooltip]');
-
-  static getInstance() {
-    return this._instance;
-  }
 
   addedToPage = false;
 
   /**
-   * @see getInstance
+   * @param {MouseEvent} event
+   */
+  moveHandler = (event) => {
+    const offset = 5;
+    this.tooltipX = event.pageX + offset;
+    this.tooltipY = event.pageY + offset;
+    this.render();
+  };
+
+  /**
+   * @param {MouseEvent} event
+   */
+  hoverHandler = (event) => {
+    if (Tooltip.haveTooltip(event.target)) {
+      this.tooltipText = event.target.dataset.tooltip;
+      this.render();
+
+      event.target.addEventListener('pointermove', this.moveHandler, {passive: true});
+    }
+  };
+
+  /**
+   * @param {MouseEvent} event
+   */
+  leaveHandler = (event) => {
+    if (Tooltip.haveTooltip(event.target)) {
+      event.target.removeEventListener('pointermove', this.moveHandler);
+      this.remove();
+    }
+  };
+
+  /**
    * @return {Tooltip}
    */
   constructor() {
     // TODO: Создание singleton через new вводит в заблуждение
-    return Tooltip._instance ?? this;
+    return Tooltip.instance || this;
   }
 
   initialize() {
@@ -23,30 +49,8 @@ class Tooltip {
     this.element.className = 'tooltip';
     this.element.style.position = 'absolute';
 
-    this._moveHandler = (event) => {
-      this.tooltipX = event.pageX + 5;
-      this.tooltipY = event.pageY + 5;
-      this.render();
-    };
-
-    this._hoverHandler = (event) => {
-      if (Tooltip.haveTooltip(event.target)) {
-        this.tooltipText = event.target.dataset.tooltip;
-        this.render();
-
-        event.target.addEventListener('pointermove', this._moveHandler, {passive: true});
-      }
-    };
-
-    this._leaveHandler = (event) => {
-      if (Tooltip.haveTooltip(event.target)) {
-        event.target.removeEventListener('pointermove', this._moveHandler);
-        this.remove();
-      }
-    };
-
-    document.body.addEventListener('pointerover', this._hoverHandler, {passive: true});
-    document.body.addEventListener('pointerout', this._leaveHandler);
+    document.body.addEventListener('pointerover', this.hoverHandler, {passive: true});
+    document.body.addEventListener('pointerout', this.leaveHandler);
   }
 
   render() {
@@ -71,8 +75,8 @@ class Tooltip {
     if (this.element) {
       this.remove();
       this.element = null;
-      document.body.removeEventListener('pointerover', this._hoverHandler);
-      document.body.removeEventListener('pointerout', this._leaveHandler);
+      document.body.removeEventListener('pointerover', this.hoverHandler);
+      document.body.removeEventListener('pointerout', this.leaveHandler);
     }
   }
 }
