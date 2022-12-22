@@ -7,6 +7,8 @@ const BACKEND_URL = 'https://course-js.javascript.ru';
 export default class ProductForm {
   /** @type {Object<String, HTMLElement>} */
   subElements = {};
+  /** @type {Object[]} */
+  images = [];
 
   /**
    * @param {?string} productId
@@ -22,9 +24,51 @@ export default class ProductForm {
       this.subElements[el.dataset.element] = el;
     });
 
+    this.initListeners();
+  }
+
+  initListeners() {
     this.subElements.productForm.addEventListener('submit', event => {
       event.preventDefault();
       this.save();
+    });
+
+    this.subElements.imageListContainer.addEventListener('click', event => {
+      const buttonDelete = event.target.closest('[data-delete-handle]');
+
+      if (buttonDelete) {
+        event.preventDefault();
+
+        const item = event.target.closest('.products-edit__imagelist-item');
+        if (item) {
+          const image = this.images.find(obj => obj.url === item.dataset.url);
+          this.images = this.images.filter(obj => obj.url !== item.dataset.url);
+          this.subElements.imageListContainer.innerHTML = this.getImageListTemplate();
+
+          if (image && image.deletehash) {
+            ProductForm.imgurDelete(image.deletehash);
+          }
+        }
+      }
+    });
+
+    this.subElements.buttonUpload.addEventListener('click', event => {
+      event.preventDefault();
+      this.subElements.fileInput.click();
+    });
+
+    this.subElements.fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      const result = await ProductForm.imgurUpload(file);
+
+      if (result.success) {
+        this.images.push({
+          source: file.name,
+          url: result.data.link,
+          deletehash: result.data.deletehash
+        });
+        this.subElements.imageListContainer.innerHTML = this.getImageListTemplate();
+      }
     });
   }
 
@@ -32,10 +76,12 @@ export default class ProductForm {
    * @return {Promise<HTMLDivElement>} Компонент
    */
   async render() {
-    await this.loadCategories();
+    const promises = [this.loadCategories()];
     if (this.productId) {
-      this.loadProduct();
+      promises.push(this.loadProduct());
     }
+
+    await Promise.all(promises);
 
     return this.element;
   }
@@ -100,24 +146,46 @@ export default class ProductForm {
     }
 
     // Загруженные изображения
-    this.subElements.imageListContainer.innerHTML = this.getImageListTemplate(model.images);
+    this.images = model.images;
+    this.subElements.imageListContainer.innerHTML = this.getImageListTemplate();
   }
 
   async save() {
-    const model = {};
-    new FormData(this.subElements.productForm)
-      .forEach(function (value, key) {
-        model[key] = value;
-      });
+    const formData = new FormData(this.subElements.productForm);
 
-    let event;
+    // Преобразование в число
+    const numericFields = [...this.subElements.productForm.elements]
+      .filter(input => input.type === 'number' || input.name === 'status')
+      .map(input => input.name);
+
+    const model = Object.fromEntries(
+      [...formData.entries()].map(item => numericFields.includes(item[0]) ? [item[0], Number(item[1])] : item)
+    );
+
+    // Избавляемся от лишних атрибутов, которые не нужны бэку
+    model.images = this.images.map(({url, source}) => {
+      return {url, source};
+    });
+
+    let eventName;
+    let methodName;
     if (this.productId) {
-      event = new CustomEvent('product-updated', {detail: model});
+      model.id = this.productId;
+      eventName = 'product-updated';
+      methodName = 'PATCH';
     } else {
-      event = new CustomEvent('product-saved', {detail: model});
+      eventName = 'product-saved';
+      methodName = 'POST';
     }
 
-    this.element.dispatchEvent(event);
+    const url = new URL('api/rest/products', BACKEND_URL);
+    const result = await fetchJson(url, {
+      method: methodName,
+      headers: {'Content-Type': 'application/json;charset=UTF-8'},
+      body: JSON.stringify(model)
+    });
+
+    this.element.dispatchEvent(new CustomEvent(eventName, {detail: result}));
   }
 
   getTemplate() {
@@ -135,7 +203,8 @@ export default class ProductForm {
       <div class="form-group form-group__wide" data-element="sortableListContainer">
         <label class="form-label">Фото</label>
         <div data-element="imageListContainer"></div>
-        <button type="button" name="uploadImage" class="button-primary-outline"><span>Загрузить</span></button>
+        <button type="button" class="button-primary-outline" data-element="buttonUpload"><span>Загрузить</span></button>
+        <input type="file" data-element="fileInput" hidden="hidden" />
       </div>
       <div class="form-group form-group__half_left">
         <label class="form-label">Категория</label>
@@ -168,18 +237,44 @@ export default class ProductForm {
     </form>`;
   }
 
-  getImageListTemplate(images = []) {
-    const inner = images.map(({source, url}) => `<li class="products-edit__imagelist-item sortable-list__item">
-          <input type="hidden" name="url[]" value="${escapeHtml(url)}" />
-          <input type="hidden" name="source[]" value="${escapeHtml(source)}" />
+  getImageListTemplate() {
+    const inner = this.images.map(({source, url}) => `<li class="products-edit__imagelist-item sortable-list__item" data-url="${escapeHtml(url)}">
           <span>
             <img src="icon-grab.svg" data-grab-handle="" alt="grab">
             <img class="sortable-table__cell-img" alt="Image" src="${escapeHtml(url)}" />
             <span>${escapeHtml(source)}</span>
           </span>
-          <button type="button"><img src="icon-trash.svg" data-delete-handle="" alt="delete"></button>
+          <button type="button" data-delete-handle><img src="icon-trash.svg" alt="delete"></button>
           </li>`)
       .join('\n');
     return `<ul class="sortable-list">${inner}</ul>`;
+  }
+
+  /**
+   * @param {File} file
+   * @return {Promise<Object>}
+   */
+  static async imgurUpload(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    return await fetchJson('https://api.imgur.com/3/upload', {
+      method: 'POST',
+      headers: {'Authorization': 'Client-ID ' + IMGUR_CLIENT_ID},
+      body: formData,
+      referrer: ''
+    });
+  }
+
+  /**
+   * @param {string} deleteHash
+   * @return {Promise<Object>}
+   */
+  static async imgurDelete(deleteHash) {
+    return await fetchJson('https://api.imgur.com/3/image/' + encodeURI(deleteHash), {
+      method: 'DELETE',
+      headers: {'Authorization': 'Client-ID ' + IMGUR_CLIENT_ID},
+      referrer: ''
+    });
   }
 }
